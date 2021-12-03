@@ -1,6 +1,6 @@
 CC = gcc -m32
-CFLAGS = -Wall -Wextra -g
-LDFLAGS = -lncurses -lm -g
+CFLAGS = -Wall -Wextra
+LDFLAGS = -lncurses -lm
 OBJS = main.o
 BINNAME = prog
 

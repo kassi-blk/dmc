@@ -23,11 +23,11 @@ enum endian {
 #define BYTE_Q 4
 #define CUR_H (CACHE_SIZE + MEM_COL_H + 6)
 #define ENDIAN ENDIAN_LITTLE
-#define TACTS_MISS 40
-#define TACTS_READ 2
+#define TACT_Q_MISS 40
+#define TACT_Q_READ 2
 
 #if CACHE_TAG_SIZE + CACHE_NUM_SIZE + CACHE_OFFSET_SIZE != ADDR_SIZE
-#error "A cache's bit quantity isn't equal to ADDR_SIZE."
+#error "A cache's bit quantity isn't equal to ADDR_SIZE"
 #endif
 
 #define RAND(min, max) ((min) + rand() % ((max) - (min) + 1))
@@ -50,44 +50,45 @@ typedef unsigned char byte;
 
 struct cache {
     bool valid;
-    unsigned int tag : CACHE_TAG_SIZE;
-    unsigned int num : CACHE_NUM_SIZE;
-    unsigned int offset : CACHE_OFFSET_SIZE;
-    byte data[BYTE_Q]; /* Data of an entire block of the memory. */
+    unsigned tag : CACHE_TAG_SIZE;
+    unsigned num : CACHE_NUM_SIZE;
+    unsigned offset : CACHE_OFFSET_SIZE;
+    byte data [BYTE_Q]; /* Data of an entire block of the memory. */
     enum test testres;
 };
 
 struct mem {
-    unsigned int addr;
-    unsigned int data;
+    unsigned addr;
+    unsigned data;
     enum mem_color color;
 };
 
-static void cache_init(void);
-static void cache_print(void);
-static void cache_dump(void);
-static void mem_init(void);
-static void mem_print(void);
-static void mem_dump(void);
-static void redraw(void);
-static void cmd_parse(void);
-static void swap(char *arr, unsigned int isrc, unsigned int idst);
-static const char * bin(unsigned int val, unsigned int len, unsigned int shift);
-static unsigned int dec(const char *val);
-static void assert(const char *str);
+static void cache_init (void);
+static void cache_print (void);
+static void cache_dump (void);
+static void mem_init (void);
+static void mem_print (void);
+static void mem_dump (void);
+static void redraw (void);
+static void cmd_parse (void);
+static void swap (char * arr, unsigned isrc, unsigned idst);
+static const char * bin (unsigned val, unsigned len, unsigned shift);
+static unsigned dec (const char * val);
+static void assert (const char * str);
 
-static char *cmd;
-static char binbuf[ADDR_SIZE];
-static SCREEN *scr;
-static struct cache *cache;
-static struct mem *mem;
-static char errbuf[256];
-static FILE *log_file;
-static FILE *data_file;
-static unsigned int data[MEM_SIZE];
-static unsigned int tacts;
+static char * cmd;
+static char binbuf [ADDR_SIZE];
+static SCREEN * scr;
+static struct cache * cache;
+static struct mem * mem;
+static char errbuf [256];
+static FILE * log_file;
+static FILE * data_file;
+static unsigned data [MEM_SIZE];
+static unsigned tacts;
 
-int main(void)
+int
+main (void)
 {
     srand(time(NULL));
 
@@ -145,23 +146,25 @@ int main(void)
 }
 
 static void
-cache_init(void)
+cache_init (void)
 {
-    cache = calloc(sizeof(struct cache), CACHE_SIZE);
+    int i;
 
-    for (int i = 0; i < CACHE_SIZE; i++) {
+    cache = calloc(sizeof(struct cache), CACHE_SIZE);
+    for (i = 0; i < CACHE_SIZE; i++) {
         cache[i].num = i;
         cache[i].testres = TEST_NONE;
     }
 }
 
 static void
-cache_print(void)
+cache_print (void)
 {
+    unsigned i, j;
+
     move(0, 0);
     printw("CACHE");
-
-    for (int i = 0; i < CACHE_SIZE; i++) {
+    for (i = 0; i < CACHE_SIZE; i++) {
         move(i + 2, 0);
 
         attron(COLOR_PAIR(cache[i].testres));
@@ -173,30 +176,32 @@ cache_print(void)
         printw("%s ", bin(cache[i].tag, CACHE_TAG_SIZE, 0));
         printw("%s ", bin(cache[i].offset, CACHE_OFFSET_SIZE, 0));
 
-        for (unsigned int j = 0; j < BYTE_Q; j++)
+        for (j = 0; j < BYTE_Q; j++)
             printw("%03u ", cache[i].data[j]);
     }
 }
 
 static void
-mem_init(void)
+mem_init (void)
 {
-    mem = malloc(sizeof(struct mem) * MEM_SIZE);
+    int i;
 
-    for (int i = 0; i < MEM_SIZE; i++) {
-        mem[i].addr = (unsigned int) &data[i];
+    mem = malloc(sizeof(struct mem) * MEM_SIZE);
+    for (i = 0; i < MEM_SIZE; i++) {
+        mem[i].addr = (unsigned) &data[i];
         mem[i].data = data[i] = RAND(0, UINT_MAX - 1);
         mem[i].color = MEM_COLOR_NONE;
     }
 }
 
 static void
-mem_print(void)
+mem_print (void)
 {
+    int i;
+
     move(CACHE_SIZE + 3, 0);
     printw("MEMORY");
-
-    for (int i = 0; i < MEM_SIZE; i++) {
+    for (i = 0; i < MEM_SIZE; i++) {
         move(CACHE_SIZE + 3 + i - i / MEM_COL_H * MEM_COL_H + 2,
             i / MEM_COL_H * MEM_COL_X_OFFSET);
 
@@ -210,7 +215,7 @@ mem_print(void)
 }
 
 static void
-redraw(void)
+redraw (void)
 {
     erase();
 
@@ -225,54 +230,49 @@ redraw(void)
 }
 
 static void
-cmd_parse(void)
+cmd_parse (void)
 {
-    const char *arg;
-    const char *delim = " ";
-    const char *cmd_begin = cmd;
+    const char * arg, * delim = " ", * cmd_begin = cmd;
+    struct cache * cache_sel;
+    bool mbf = false, cbf = false;
+    unsigned i, addr, tag, idx, offset;
 
     arg = strsep(&cmd, delim);
+    if (!strcmp(arg, "help")) {
+        printw("get <addr>\n");
+        getch();
+    }
     if (!strcmp(arg, "get")) {
-        const unsigned int *addr;
-        unsigned int i;
-        struct cache *cache_sel;
-        bool mbf = false;
-        bool cbf = false;
-        unsigned int tag;
-        unsigned int idx;
-        unsigned int offset;
-
         /* Parse a memory's address. */
         arg = strsep(&cmd, delim);
         if (!arg)
             return;
 
-        addr = &(unsigned int) {strtol(arg, NULL, 16)};
+        addr = strtol(arg, NULL, 16);
 
-        tag = GET_TAG(*addr);
-        idx = GET_INDEX(*addr);
-        offset = GET_OFFSET(*addr);
+        tag = GET_TAG(addr);
+        idx = GET_INDEX(addr);
+        offset = GET_OFFSET(addr);
 
         /* Compare a given address with a memory block's address. */
-        for (i = 0; i < MEM_SIZE; i++) {
-            if (*addr - offset == mem[i].addr) {
+        for (i = 0; i < MEM_SIZE; i++)
+            if (addr - offset == mem[i].addr) {
                 mem[i].color = MEM_COLOR_SEL;
 
                 mbf = true;
 
                 break;
             }
-        }
 
         if (!mbf) {
             sprintf(errbuf, "Couldn't find a block of the memory by the "
-                "0x%08x address.", *addr);
+                "0x%08x address.", addr);
 
             assert(errbuf);
         }
 
         /* Search a cache's block by an index. */
-        for (i = 0; i < CACHE_SIZE; i++) {
+        for (i = 0; i < CACHE_SIZE; i++)
             if (cache[i].num == idx) {
                 cache_sel = &cache[i];
 
@@ -280,7 +280,6 @@ cmd_parse(void)
 
                 break;
             }
-        }
 
         if (!cbf) {
             sprintf(errbuf, "Couldn't find a block of the cache by the 0x%x "
@@ -302,33 +301,35 @@ cmd_parse(void)
 
             for (i = 0; i < BYTE_Q; i++)
                 cache_sel->data[ENDIAN == ENDIAN_LITTLE ? BYTE_Q - 1 - i : i]
-                    = *(byte *) (*addr + i);
+                    = *(byte *) (addr + i);
 
-            tacts += TACTS_MISS;
+            tacts += TACT_Q_MISS;
         }
 
         cache_sel->offset = offset;
 
-        fprintf(data_file, "0x%08x %u %03d\n", *addr - offset, offset,
+        fprintf(data_file, "0x%08x %u %03d\n", addr - offset, offset,
             cache_sel->data[offset]);
 
-        tacts += TACTS_READ;
+        tacts += TACT_Q_READ;
     }
 
     cmd = (char *) cmd_begin;
 }
 
 static void
-cache_dump(void) {
-    fprintf(log_file, "CACHE\n\n");
+cache_dump (void)
+{
+    unsigned i, j;
 
-    for (int i = 0; i < CACHE_SIZE; i++) {
+    fprintf(log_file, "CACHE\n\n");
+    for (i = 0; i < CACHE_SIZE; i++) {
         fprintf(log_file, "%s ", bin(cache[i].num, CACHE_NUM_SIZE, 0));
         fprintf(log_file, "%d ", cache[i].valid);
         fprintf(log_file, "%s ", bin(cache[i].tag, CACHE_TAG_SIZE, 0));
         fprintf(log_file, "%s ", bin(cache[i].offset, CACHE_OFFSET_SIZE, 0));
 
-        for (unsigned int j = 0; j < BYTE_Q; j++)
+        for (j = 0; j < BYTE_Q; j++)
             fprintf(log_file, "%03u ", cache[i].data[j]);
 
         fprintf(log_file, "\n");
@@ -336,15 +337,17 @@ cache_dump(void) {
 }
 
 static void
-mem_dump(void) {
-    fprintf(log_file, "MEMORY\n\n");
+mem_dump (void)
+{
+    int i;
 
-    for (int i = 0; i < MEM_SIZE; i++)
+    fprintf(log_file, "MEMORY\n\n");
+    for (i = 0; i < MEM_SIZE; i++)
         fprintf(log_file, "0x%08x %010u\n", mem[i].addr, mem[i].data);
 }
 
 static void
-assert(const char *str)
+assert (const char * str)
 {
     endwin();
     delscreen(scr);
@@ -369,7 +372,7 @@ assert(const char *str)
 }
 
 static void
-swap(char *arr, unsigned int isrc, unsigned int idst)
+swap (char * arr, unsigned isrc, unsigned idst)
 {
     char buf = arr[isrc];
 
@@ -378,10 +381,9 @@ swap(char *arr, unsigned int isrc, unsigned int idst)
 }
 
 static const char *
-bin(unsigned int val, unsigned int len, unsigned int shift)
+bin (unsigned val, unsigned len, unsigned shift)
 {
-    unsigned int offset = 0;
-    unsigned int i;
+    unsigned offset = 0, i;
 
     memset(binbuf, '0', ADDR_SIZE);
 
@@ -409,13 +411,12 @@ bin(unsigned int val, unsigned int len, unsigned int shift)
     return binbuf + ADDR_SIZE - len;
 }
 
-static unsigned int
-dec(const char *val)
+static unsigned
+dec (const char * val)
 {
-    unsigned int res = 0;
-    unsigned int len = strlen(val);
+    unsigned i, res = 0, len = strlen(val);
 
-    for (unsigned int i = 0; i < len; i++)
+    for (i = 0; i < len; i++)
         res += (val[i] - '0') * pow(2, len - 1 - i);
 
     return res;
