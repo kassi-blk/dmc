@@ -1,16 +1,28 @@
 CC = gcc -m32
-CFLAGS = -Wall -Wextra
-LDFLAGS = -lncurses -lm
-OBJS = main.o
-BINNAME = prog
+CFLAGS = -Wall -Wextra -Iinclude -g
+LDFLAGS = -lncurses -lm -g
+SRC_DIR = src
+OBJ_DIR = obj
+BIN_DIR = bin
+SRC = $(addprefix $(SRC_DIR)/,main.c utils.c mem.c cache.c)
+OBJ = $(SRC:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
+BIN_NAME = prog
 
 .PHONY: all
-all: $(OBJS)
-	@$(CC) $(LDFLAGS) -o $(BINNAME) $^
+all: $(BIN_DIR)/$(BIN_NAME)
 
-%.o: %.c
-	@$(CC) $(CFLAGS) -c $^ -o $@
+$(BIN_DIR)/$(BIN_NAME): $(OBJ) | $(BIN_DIR)
+	$(CC) $(LDFLAGS) -o $@ $^
+
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(OBJ_DIR):
+	@[ -d $(OBJ_DIR) ] || mkdir $(OBJ_DIR)
+
+$(BIN_DIR):
+	@[ -d $(BIN_DIR) ] || mkdir $(BIN_DIR)
 
 .PHONY: clean
 clean:
-	@rm -f $(BINNAME) *.o
+	rm -rf $(OBJ_DIR) $(BIN_DIR)
